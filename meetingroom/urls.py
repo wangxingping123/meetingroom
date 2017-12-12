@@ -19,5 +19,7 @@ from app01 import views
 urlpatterns = [
     url(r'^admin/', admin.site.urls),
     url(r'^index/', views.index),
+    url(r'^roominfo/', views.roominfo),
     url(r'^login/', views.login),
+    url(r'^cancel/(\d+)', views.cancel),
 ]

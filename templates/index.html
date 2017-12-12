@@ -16,6 +16,31 @@
         }
         .room{background-color: yellow}
 
+        .hide{display: none}
+
+        .shade {
+            position: fixed;
+            z-index: 1040;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #999;
+            filter: alpha(opacity=50);
+            -moz-opacity: 0.5;
+            opacity: 0.5;
+        }
+
+        .loading {
+            position: fixed;
+            z-index: 1050;
+            top: 40%;
+            left: 50%;
+            height: 32px;
+            width: 32px;
+            margin: 0 0 0 -16px;
+            background: url(/static/img/loading.gif) no-repeat  0 0;
+        }
     </style>
 
 </head>
@@ -24,7 +49,7 @@
 <div class="container">
     <h2>会议室预定</h2>
     <div class="input-append date form_datetime pull-right" >
-    <input size="20" class="reserve_time" type="text"  value="{{ current_time }}" readonly>
+    <input size="20" class="reserve_time" type="text"  value="{{ nowtime|date:"Y-m-d" }}" readonly>
     <span class="add-on"><i class="icon-remove"></i></span>
     <span class="add-on"><i class="icon-calendar"></i></span>
         <button class="btn btn-primary" id="btn_save">预约</button>
@@ -38,30 +63,78 @@
             {% endfor %}
         </tr>
         </thead>
-        <tbody>
-        {% for i,v in room_dic.items %}
-        <tr room_id="{{ i }}">
-        <td>{{ v.name }}</td>
-        {% for i,v in v.info.items %}
-        <td choice="{{ i }}">{{ v }}</td>
-        {% endfor %}
-
-        </tr>
-        {% endfor %}
+        <tbody id="tbody">
 
 
         </tbody>
     </table>
-
-
 </div>
+
+<div class="userinfo" username="{{ request.session.user.username }}"></div>
+<div id='shade' class='shade hide'></div>
+<div id='loading' class='loading hide'></div>
 <script src="/static/jquery-3.2.1.min.js"></script>
 <script src="/static/jquery.cookie.js"></script>
 <script src="{% static "datetimepicker/bootstrap-datetimepicker.min.js" %}"></script>
 <script src="{% static "datetimepicker/bootstrap-datetimepicker.zh-CN.js" %}"></script>
 <script type="text/javascript">
 
-    var time=new Date();
+     Date.prototype.Format = function (fmt) { //author: meizz
+        var o = {
+            "M+": this.getMonth() + 1, //月份
+            "d+": this.getDate(), //日
+            "h+": this.getHours(), //小时
+            "m+": this.getMinutes(), //分
+            "s+": this.getSeconds(), //秒
+            "q+": Math.floor((this.getMonth() + 3) / 3), //季度
+            "S": this.getMilliseconds() //毫秒
+        };
+        if (/(y+)/.test(fmt)) fmt = fmt.replace(RegExp.$1, (this.getFullYear() + "").substr(4 - RegExp.$1.length));
+        for (var k in o)
+            if (new RegExp("(" + k + ")").test(fmt)) fmt = fmt.replace(RegExp.$1, (RegExp.$1.length == 1) ? (o[k]) : (("00" + o[k]).substr(("" + o[k]).length)));
+        return fmt;
+    };
+     $(function () {
+         //获取当前日期
+         var date=new Date();
+         //调用函数显示预定信息
+        roominfo(date.Format("yyyy-MM-dd"))
+
+     });
+
+     function roominfo(date) {
+         $(".shade,.loading").removeClass("hide");
+         $.ajax({
+             url:"/roominfo/",
+             data:{"date":date},
+             success:function (data) {
+                 $("#tbody").empty();
+                 $(".shade,.loading").addClass("hide");
+                 $.each(data,function (room_id,room_info) {
+                    var tr=$(document.createElement("tr"));
+                    tr.attr("room_id",room_id);
+                    var td=$(document.createElement("td"));
+                    td.text(room_info.name);
+                    tr.append(td);
+                    $.each(room_info.info,function (i,v) {
+                        var td=$(document.createElement("td"));
+                        td.attr("time_slot",i);
+                        if (v){
+                            td.attr("reserve_id",v.id);
+                            td.text(v.name)
+                        }
+
+                        tr.append(td)
+                    });
+                    $("#tbody").append(tr)
+
+                })
+             }
+
+         })
+     }
+
+  var time=new Date();
     var currernt_time=time.toLocaleDateString();
 
     $(".form_datetime").datetimepicker({
@@ -70,21 +143,21 @@
         minView:2,
         todayBtn: true,
         startDate:currernt_time ,
-        minuteStep: 10,
+        minuteStep: 10
+    }).on('changeDate', changeDate);
 
-    });
-</script>
+     function changeDate(ev) {
+        CHOSEN_DATE = ev.date.Format('yyyy-MM-dd');
+        roominfo(CHOSEN_DATE);
 
-<script>
-
-
-
+    }
 
     //给所有的td标签添加点击事件
-    $("td").click(function () {
-        if ($(this).text() == 'None'){
+    $(document).on("click","td",function () {
+          if ($(this).text() === ''){
             $(this).toggleClass("room")
         }
+
     });
 
     //给预约按钮添加点击事件用ajax发送请求到后端处理
@@ -93,7 +166,7 @@
         $(".room").each(function () {
             var this_tag=$(this);
             var data_dic={"room_id":this_tag.parent().attr("room_id"),
-            "time_slot":this_tag.attr("choice"),"reserve_time":$(".reserve_time").val()};
+            "time_slot":this_tag.attr("time_slot"),"reserve_time":$(".reserve_time").val()};
             data_list.push(data_dic)
         });
 
@@ -106,7 +179,8 @@
             success:function (data) {
                 var data=JSON.parse(data);
                 if(data["flag"]){
-                    alert("预约成功")
+                    alert("预约成功");
+                    roominfo(data["reserve_time"])
                 }else {
                     alert("数据库异常")
                 }
@@ -115,9 +189,44 @@
 
         });
 
-        console.log(data_list)
+
+    });
+
+    //td标签添加鼠标悬浮事件显示取消预约按钮
+
+    $(document).on('mouseover',"td",function () {
+
+        if ($(this).text() === $(".userinfo").attr("username")){
+            $(this).html('<button class="cancel">取消预约</button>')
+        }
+
+    });
+
+    $(document).on('mouseleave',"td",function () {
+
+        if ($(this).text() === '取消预约'){
+            $(this).html($(".userinfo").attr("username"))
+        }
 
 
+    });
+
+    //给取消预约按钮添加点击事件
+
+    $(document).on('click',".cancel",function () {
+        var this_tag=$(this);
+
+        $.ajax({
+            url:"/cancel/"+this_tag.parent().attr("reserve_id"),
+            success:function (data) {
+                if(data){
+                    this_tag.parent().html('')
+                } else {
+                    alert("数据库异常")
+        }
+
+            }
+        })
     })
 
 

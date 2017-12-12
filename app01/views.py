@@ -1,5 +1,6 @@
 import json
 from django.shortcuts import render,HttpResponse,redirect
+from django.http import JsonResponse
 from app01 import models
 
 
@@ -27,7 +28,7 @@ def index(request):
 
     if request.method =="POST":
         '''保存用户的预定信息'''
-        data={"flag":True}
+        data={"flag":True,}
         reserve_list=json.loads(request.body.decode("utf8")) #取出预定信息
 
         try:
@@ -40,24 +41,42 @@ def index(request):
                 reservation_id=user_id)
                 objlist.append(obj)
             models.RoomDetail.objects.bulk_create(objlist)
+            data["reserve_time"]=reserve_time
         except:
             data["flag"]=False
         return HttpResponse(json.dumps(data))
+
     #一天中所有的时间段信息
-    import datetime
-    current_time,_=str(datetime.datetime.now()).split(" ")  #获取当前的日期
-
     time_slot=models.RoomDetail.time_choice
-    room_dic={}
+    import datetime
+    nowtime=datetime.datetime.now().date()
 
-    roomlist=models.Room.objects.all()
+    return render(request,"index.html",{"time_slot":time_slot,"nowtime":nowtime})
+
+
+def roominfo(request):
+
+
+
+    #获取用户要查询的时间
+    date=request.GET.get("date")
+    room_dic = {}
+    roomlist = models.Room.objects.all()
     for room in roomlist:
-        room_dic[room.id]={"name":room.name,"info":{time[0]: None for time in models.RoomDetail.time_choice}}
-    room_detail_list=models.RoomDetail.objects.filter(create_time=current_time)
+        room_dic[room.id] = {"name": room.name, "info": {time[0]: None for time in models.RoomDetail.time_choice}}
+    room_detail_list = models.RoomDetail.objects.filter(create_time=date)
     for obj in room_detail_list:
-        #将每一个会议室的预定信息保存到字典中
-        room_dic[obj.room_id]["info"][obj.time]=obj.reservation.username
+        # 将每一个会议室的预定信息保存到字典中
+        room_dic[obj.room_id]["info"][obj.time] = {"name":obj.reservation.username,"id":obj.id}
+  
+    return JsonResponse(room_dic)
 
-    print(room_dic)
-    return render(request,"index.html",{"time_slot":time_slot,"room_dic":room_dic,
-                                        "current_time":current_time})
+def cancel(request,id):
+    #取消预约
+    data={"flag":True}
+    user_id = request.session["user"].get("user_id")
+    try:
+        models.RoomDetail.objects.filter(id=id,user_id=user_id).delete()
+    except:
+        data["flag"]=False
+    return JsonResponse(data)
